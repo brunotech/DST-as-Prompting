@@ -104,12 +104,12 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        data_files = dict()
+        data_files = {}
         if self.train_dir is not None:
             data_files["train"] = self.train_dir
         if self.validation_dir is not None:
             data_files["val"] = self.validation_dir
-        self.data_files = data_files if data_files else None
+        self.data_files = data_files or None
 
 
 @dataclass
@@ -180,8 +180,10 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+        (
+            f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+            + f"distributed training: {training_args.local_rank != -1}, 16-bits training: {training_args.fp16}"
+        )
     )
     logger.info(f"Training/evaluation parameters {training_args}")
 
@@ -219,7 +221,7 @@ def main():
     # Prepare label mappings.
     # We'll include these in the model's config to get human readable labels in the Inference API.
     labels = ds["train"].features["labels"].names
-    label2id, id2label = dict(), dict()
+    label2id, id2label = {}, {}
     for i, label in enumerate(labels):
         label2id[label] = str(i)
         id2label[str(i)] = label
@@ -245,7 +247,7 @@ def main():
     )
     model = AutoModelForImageClassification.from_pretrained(
         model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
+        from_tf=".ckpt" in model_args.model_name_or_path,
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,

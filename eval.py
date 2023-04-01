@@ -81,10 +81,11 @@ def noncat_slot_value_match(str_ref_list, str_hyp, use_fuzzy_match):
     """
     score = 0.0
     for str_ref in str_ref_list:
-        if not use_fuzzy_match:
-            match_score = float(str_ref == str_hyp)
-        else:
-            match_score = fuzzy_string_match(str_ref, str_hyp)
+        match_score = (
+            fuzzy_string_match(str_ref, str_hyp)
+            if use_fuzzy_match
+            else float(str_ref == str_hyp)
+        )
         score = max(score, match_score)
     return score
 
@@ -157,16 +158,15 @@ def get_average_and_joint_goal_accuracy(frame_ref, frame_hyp, service,
         goal_acc: a dict whose values are average / joint
                 all-goal / categorical-goal / non-categorical-goal accuracies.
     """
-    goal_acc = {}
-
     list_acc, slot_active, slot_cat = compare_slot_values(
             frame_ref["state"]["slot_values"], frame_hyp["state"]["slot_values"],
             service, use_fuzzy_match)
 
     # (4) Average goal accuracy.
     active_acc = [acc for acc, active in zip(list_acc, slot_active) if active]
-    goal_acc[AVERAGE_GOAL_ACCURACY] = np.mean(
-            active_acc) if active_acc else NAN_VAL
+    goal_acc = {
+        AVERAGE_GOAL_ACCURACY: np.mean(active_acc) if active_acc else NAN_VAL
+    }
     # (4-a) categorical.
     active_cat_acc = [
             acc for acc, active, cat in zip(list_acc, slot_active, slot_cat)
@@ -226,7 +226,7 @@ def get_dataset_as_dict(file_path_patterns):
                 for dial in data:
                     dataset_dict[dial["dialogue_id"]] = dial
             elif isinstance(data, dict):
-                dataset_dict.update(data)
+                dataset_dict |= data
     return dataset_dict
 
 
@@ -275,8 +275,7 @@ def get_metrics(dataset_ref, dataset_hyp, service_schemas, in_domain_services):
             metric_collections_per_turn = collections.defaultdict(
                     lambda: collections.defaultdict(lambda: 1.0))
             if turn_ref["speaker"] != turn_hyp["speaker"]:
-                raise ValueError(
-                        "Speakers don't match in dialogue with id {}".format(dial_id))
+                raise ValueError(f"Speakers don't match in dialogue with id {dial_id}")
 
             # Skip system turns because metrics are only computed for user turns.
             if turn_ref["speaker"] != "USER":
@@ -291,11 +290,11 @@ def get_metrics(dataset_ref, dataset_hyp, service_schemas, in_domain_services):
                 service_name = frame_ref["service"]
                 if service_name not in hyp_frames_by_service:
                     raise ValueError(
-                            "Frame for service {} not found in dialogue with id {}".format(
-                                    service_name, dial_id))
+                        f"Frame for service {service_name} not found in dialogue with id {dial_id}"
+                    )
                 service = service_schemas[service_name]
                 frame_hyp = hyp_frames_by_service[service_name]
-                
+
                 goal_accuracy_dict = get_average_and_joint_goal_accuracy(
                         frame_ref, frame_hyp, service, args.use_fuzzy_match)
                 #print(frame_ref)
@@ -304,7 +303,7 @@ def get_metrics(dataset_ref, dataset_hyp, service_schemas, in_domain_services):
                 #print("-----------------------------------------")
 
                 frame_metric = {}
-                frame_metric.update(goal_accuracy_dict)
+                frame_metric |= goal_accuracy_dict
 
                 frame_id = "{:s}-{:03d}-{:s}".format(dial_id, turn_id,
                                                                                          frame_hyp["service"])
@@ -336,13 +335,10 @@ def get_metrics(dataset_ref, dataset_hyp, service_schemas, in_domain_services):
                         metric_collections[domain_key][metric_key].append(metric_value)
     all_metric_aggregate = {}
     for domain_key, domain_metric_vals in metric_collections.items():
-        domain_metric_aggregate = {}
-        for metric_key, value_list in domain_metric_vals.items():
-            if value_list:
-                # Metrics are macro-averaged across all frames.
-                domain_metric_aggregate[metric_key] = float(np.mean(value_list))
-            else:
-                domain_metric_aggregate[metric_key] = NAN_VAL
+        domain_metric_aggregate = {
+            metric_key: float(np.mean(value_list)) if value_list else NAN_VAL
+            for metric_key, value_list in domain_metric_vals.items()
+        }
         all_metric_aggregate[domain_key] = domain_metric_aggregate
     return all_metric_aggregate, per_frame_metric
 
@@ -355,11 +351,8 @@ def main(args):
 
 
     with open(os.path.join(args.data_dir, args.eval_set, "schema.json")) as f:
-        eval_services = {}
         list_services = json.load(f)
-        for service in list_services:
-            eval_services[service["service_name"]] = service
-
+        eval_services = {service["service_name"]: service for service in list_services}
     dataset_ref = get_dataset_as_dict(
             os.path.join(args.data_dir, args.eval_set, "dialogues_*.json"))
     dataset_hyp = get_dataset_as_dict(
@@ -372,7 +365,7 @@ def main(args):
 
     all_metric_aggregate, _ = get_metrics(dataset_ref, dataset_hyp, eval_services,
                                                                                 in_domain_services)
-    print("Dialog metrics: %s", str(all_metric_aggregate[ALL_SERVICES]))
+    print("Dialog metrics: %s", all_metric_aggregate[ALL_SERVICES])
 
     with open(args.output_metric_file, "w") as f:
         json.dump(
@@ -381,7 +374,7 @@ def main(args):
                 indent=2,
                 separators=(",", ": "),
                 sort_keys=True)
-        
+
     # Write the per-frame metrics values with the corrresponding dialogue frames.
     with open(      
             os.path.join(args.prediction_dir, PER_FRAME_OUTPUT_FILENAME), "w") as f:

@@ -8,28 +8,26 @@ import argparse
 
 def main(args):
     # create dummy frame as in MultiWOZ2.2 file format
-    domains = ["train", "taxi", "bus", "police", "hotel", "restaurant", "attraction", "hospital"] 
-    dummy_frames = []
-    for domain in domains:
-        dummy_frames.append({"service":domain, "state":{"slot_values":{}}})
-
-
+    domains = ["train", "taxi", "bus", "police", "hotel", "restaurant", "attraction", "hospital"]
+    dummy_frames = [
+        {"service": domain, "state": {"slot_values": {}}} for domain in domains
+    ]
     # Create dummy jsons to fill in later
     dummy_dial_file_json_1 = []
     dummy_dial_file_json_2 = []
     split = "test"
-    target_jsons = glob(os.path.join(args.data_dir, "{}/*json".format(split)))
+    target_jsons = glob(os.path.join(args.data_dir, f"{split}/*json"))
     for target_json_n in target_jsons:
         if target_json_n.split("/")[-1] == "schema.json":
             continue
-        target_json = json.load(open(target_json_n)) 
+        target_json = json.load(open(target_json_n))
         for dial_json in target_json:
-            dial_id = dial_json["dialogue_id"] 
+            dial_id = dial_json["dialogue_id"]
             dummy_dial_json = {"dialogue_id": dial_id, "turns":[]}
 
             for turn in dial_json["turns"]:
-                turn_id = turn["turn_id"]
                 if turn["speaker"] == "USER":
+                    turn_id = turn["turn_id"]
                     dummy_dial_json["turns"].append( {"turn_id":turn_id, "speaker":"USER", "frames":copy.deepcopy(dummy_frames)} )
                 else:
                     dummy_dial_json["turns"].append(turn)
@@ -54,12 +52,11 @@ def main(args):
         val = out_lines[_idx].strip()
         # For active slots, update values in the dummy jsons
         if val != "NONE":
-            d_s_name = d_name + "-" + s_name 
+            d_s_name = f"{d_name}-{s_name}"
             if dial_json_n == "dialogues_001.json":
                 dummy_dial_file_json_1[int(dial_idx)]["turns"][int(turn_idx)]["frames"][int(frame_idx)]["state"]["slot_values"].update({d_s_name: [val]})
             elif dial_json_n == "dialogues_002.json":
                 dummy_dial_file_json_2[int(dial_idx)]["turns"][int(turn_idx)]["frames"][int(frame_idx)]["state"]["slot_values"].update({d_s_name: [val]})
-        # NONE token means the slot is non-active. Skip the updating option
         else:
             continue
 
@@ -68,12 +65,11 @@ def main(args):
 
     # Create dummy json files for evaluation
     for n in ["dialogues_001", "dialogues_002"]:
-        dummy_out_file = open(os.path.join(args.out_dir, "dummy_out_{n}.json".format(n=n)), "w")
-        if n == "dialogues_001":
-            json.dump(dummy_dial_file_json_1, dummy_out_file, indent=4)
-        elif n == "dialogues_002":
-            json.dump(dummy_dial_file_json_2, dummy_out_file, indent=4)
-        dummy_out_file.close()
+        with open(os.path.join(args.out_dir, "dummy_out_{n}.json".format(n=n)), "w") as dummy_out_file:
+            if n == "dialogues_001":
+                json.dump(dummy_dial_file_json_1, dummy_out_file, indent=4)
+            elif n == "dialogues_002":
+                json.dump(dummy_dial_file_json_2, dummy_out_file, indent=4)
         
     
 

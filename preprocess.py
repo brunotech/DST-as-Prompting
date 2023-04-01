@@ -16,7 +16,7 @@ def preprocess(dial_json, schema, out, idx_out, excluded_domains, frame_idxs):
     dial = dial_json[dial_idx]
     cur_dial = ""
     for turn in dial["turns"]:
-      speaker = " [" + turn["speaker"] + "] " 
+      speaker = " [" + turn["speaker"] + "] "
       uttr = turn["utterance"]
       cur_dial += speaker
       cur_dial += uttr  
@@ -29,7 +29,7 @@ def preprocess(dial_json, schema, out, idx_out, excluded_domains, frame_idxs):
             value = sample(values,1)[0]
             active_slot_values[key] = value
 
-        # iterate thourgh each domain-slot pair in each user turn 
+        # iterate thourgh each domain-slot pair in each user turn
         for domain in schema:
           # skip domains that are not in the testing set
           if domain["service_name"] in excluded_domains:
@@ -39,20 +39,15 @@ def preprocess(dial_json, schema, out, idx_out, excluded_domains, frame_idxs):
             d_name, s_name = slot["name"].split("-")
             # generate schema prompt w/ or w/o natural langauge descriptions
             schema_prompt = ""
-            schema_prompt += " [domain] " + d_name + " " + domain["description"] if domain_desc_flag else d_name
-            schema_prompt += " [slot] " + s_name + " " + slot["description"] if slot_desc_flag  else s_name
-            if PVs_flag:
-              # only append possible values if the slot is categorical
-              if slot["is_categorical"]:
-                PVs = ", ".join(slot["possible_values"])
-                schema_prompt += " [PVs] " + PVs
+            schema_prompt += (f" [domain] {d_name} " + domain["description"]
+                              if domain_desc_flag else d_name)
+            schema_prompt += (f" [slot] {s_name} " + slot["description"]
+                              if slot_desc_flag else s_name)
+            if PVs_flag and slot["is_categorical"]:
+              PVs = ", ".join(slot["possible_values"])
+              schema_prompt += f" [PVs] {PVs}"
 
-            if slot["name"] in active_slot_values.keys():
-              target_value = active_slot_values[slot["name"]]
-            else:
-              # special token for non-active slots
-              target_value = "NONE"
-            
+            target_value = active_slot_values.get(slot["name"], "NONE")
             line = { "dialogue": cur_dial + schema_prompt, "state":  target_value }
             out.write(json.dumps(line))
             out.write("\n")
@@ -65,27 +60,25 @@ def preprocess(dial_json, schema, out, idx_out, excluded_domains, frame_idxs):
 
 
 def main():
-    #data_path = "./MultiWOZ_2.2/"
-    data_path = sys.argv[1]
+  #data_path = "./MultiWOZ_2.2/"
+  data_path = sys.argv[1]
 
-    schema_path = data_path + "schema.json"
-    schema = json.load(open(schema_path))
+  schema_path = f"{data_path}schema.json"
+  schema = json.load(open(schema_path))
 
-    frame_idxs = {"train": 0, "taxi":1, "bus":2, "police":3, "hotel":4, "restaurant":5, "attraction":6, "hospital":7}
+  frame_idxs = {"train": 0, "taxi":1, "bus":2, "police":3, "hotel":4, "restaurant":5, "attraction":6, "hospital":7}
 
-    # skip domains that are not in the testing set
-    excluded_domains = ["police", "hospital", "bus"]
-    for split in ["train", "dev", "test"]:
-        print("--------Preprocessing {} set---------".format(split))
-        out = open(os.path.join(data_path, "{}.json".format(split)), "w")
-        idx_out = open(os.path.join(data_path, "{}.idx".format(split)), "w")
-        dial_jsons = glob(os.path.join(data_path, "{}/*json".format(split)))
+  # skip domains that are not in the testing set
+  excluded_domains = ["police", "hospital", "bus"]
+  for split in ["train", "dev", "test"]:
+    print(f"--------Preprocessing {split} set---------")
+    with open(os.path.join(data_path, f"{split}.json"), "w") as out:
+      with open(os.path.join(data_path, f"{split}.idx"), "w") as idx_out:
+        dial_jsons = glob(os.path.join(data_path, f"{split}/*json"))
         for dial_json in dial_jsons:
             if dial_json.split("/")[-1] != "schema.json":
                 preprocess(dial_json, schema, out, idx_out, excluded_domains, frame_idxs)
-        idx_out.close()
-        out.close()
-    print("--------Finish Preprocessing---------")
+  print("--------Finish Preprocessing---------")
 
 
 if __name__=='__main__':
